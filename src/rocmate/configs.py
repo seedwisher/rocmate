@@ -6,8 +6,9 @@ from importlib.resources import files
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
 from typing import Literal
+
+from pydantic import BaseModel, Field
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table

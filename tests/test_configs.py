@@ -301,7 +301,9 @@ def test_all_matrix_chips_have_at_least_one_tool():
             chip_id in configs.load_tool(tool).chips
             for tool in configs.list_tools()
         )
-        assert has_data, f"Chip {chip_id} ({chip_label}) is in build_matrix.CHIPS but has no tool config data"
+        assert has_data, (
+            f"Chip {chip_id} ({chip_label}) is in build_matrix.CHIPS but has no tool config data"
+        )
 
 
 # --- render ---
