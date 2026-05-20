@@ -286,6 +286,24 @@ def test_gfx1151_install_hints_are_string_lists():
             assert isinstance(hint, str), f"{tool}/gfx1151 install_hints must contain strings"
 
 
+# ---------------------------------------------------------------------------
+# Cross-file consistency: build_matrix CHIPS vs. configs
+# ---------------------------------------------------------------------------
+
+def test_all_matrix_chips_have_at_least_one_tool():
+    """Every chip in build_matrix.CHIPS must have data in at least one tool config."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+    import build_matrix
+    for chip_id, chip_label in build_matrix.CHIPS:
+        has_data = any(
+            chip_id in configs.load_tool(tool).chips
+            for tool in configs.list_tools()
+        )
+        assert has_data, f"Chip {chip_id} ({chip_label}) is in build_matrix.CHIPS but has no tool config data"
+
+
 # --- render ---
 
 

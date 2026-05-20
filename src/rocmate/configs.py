@@ -7,13 +7,14 @@ from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, Field
+from typing import Literal
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 
 class ChipSupport(BaseModel):
-    status: str  # "tested" | "partial" | "broken"
+    status: Literal["tested", "partial", "broken"]
     tested_on_rocm: str | None = None  # e.g. "6.2", "6.3" — None = unknown
     notes: str | None = None
     env_vars: dict[str, str] = Field(default_factory=dict)
