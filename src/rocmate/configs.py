@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path
-
-import yaml
 from typing import Literal
 
+import yaml
 from pydantic import BaseModel, Field
 from rich.console import Console
 from rich.panel import Panel
