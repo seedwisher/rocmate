@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import mock_open, patch
+import subprocess
+from unittest.mock import MagicMock, mock_open, patch
 
 from rocmate import gpu
 
@@ -49,6 +50,16 @@ ROCk module is loaded
 _ROCMINFO_MISSING_MARKETING_NAME = """\
 **** Agent 1 ****
   Name:                    gfx1030
+  Device Type:             GPU
+  Size:                    8388608(0x800000) KB
+"""
+
+# GPU block that has Device Type=GPU but no "Name: gfxXXXX" line (unknown ISA)
+_ROCMINFO_GPU_NO_GFX_LINE = """\
+ROCk module is loaded
+
+**** Agent 1 ****
+  Marketing Name:          Some Future GPU
   Device Type:             GPU
   Size:                    8388608(0x800000) KB
 """
@@ -105,6 +116,13 @@ def test_missing_marketing_name_falls_back_to_unknown():
         gpus = gpu._detect_amd_gpus_linux()
     assert len(gpus) == 1
     assert gpus[0].name == "Unknown AMD GPU"
+
+
+def test_gpu_block_without_gfx_line_is_skipped():
+    """A GPU agent block with no 'Name: gfxXXXX' entry must be silently skipped."""
+    with patch("rocmate.gpu._run", return_value=_ROCMINFO_GPU_NO_GFX_LINE):
+        gpus = gpu._detect_amd_gpus_linux()
+    assert gpus == []
 
 
 # --- get_rocm_version ---
@@ -164,6 +182,39 @@ def test_returns_none_when_hipcc_output_unparseable():
 
 def test_run_returns_none_when_command_not_found():
     with patch("rocmate.gpu.shutil.which", return_value=None):
+        result = gpu._run(["rocminfo"])
+    assert result is None
+
+
+def test_run_returns_none_on_timeout():
+    with (
+        patch("rocmate.gpu.shutil.which", return_value="/usr/bin/rocminfo"),
+        patch(
+            "rocmate.gpu.subprocess.run",
+            side_effect=subprocess.TimeoutExpired("rocminfo", 10),
+        ),
+    ):
+        result = gpu._run(["rocminfo"])
+    assert result is None
+
+
+def test_run_returns_none_on_os_error():
+    with (
+        patch("rocmate.gpu.shutil.which", return_value="/usr/bin/rocminfo"),
+        patch("rocmate.gpu.subprocess.run", side_effect=OSError("permission denied")),
+    ):
+        result = gpu._run(["rocminfo"])
+    assert result is None
+
+
+def test_run_returns_none_on_nonzero_exit():
+    mock_proc = MagicMock()
+    mock_proc.returncode = 1
+    mock_proc.stdout = "error output"
+    with (
+        patch("rocmate.gpu.shutil.which", return_value="/usr/bin/rocminfo"),
+        patch("rocmate.gpu.subprocess.run", return_value=mock_proc),
+    ):
         result = gpu._run(["rocminfo"])
     assert result is None
 
@@ -315,6 +366,11 @@ class TestDetectViaWmi:
 
     def test_wmic_unavailable_returns_empty(self):
         with patch("rocmate.gpu._run", return_value=None):
+            assert gpu._detect_via_wmi() == []
+
+    def test_wmic_block_without_name_is_skipped(self):
+        """A wmic block that has AdapterRAM but no Name= line must be skipped."""
+        with patch("rocmate.gpu._run", return_value="AdapterRAM=25769803776\n"):
             assert gpu._detect_via_wmi() == []
 
 

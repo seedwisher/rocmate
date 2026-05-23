@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import io
+from unittest.mock import MagicMock, patch
 
 import pytest
 from rich.console import Console
 
 from rocmate import configs
+from rocmate.configs import ChipSupport, ToolConfig
 
 # --- list_tools ---
 
@@ -342,3 +344,67 @@ def test_render_shows_question_mark_for_unknown_rocm():
     if missing:
         output = _render_to_str(cfg)
         assert "?" in output
+
+
+def test_render_skips_detail_section_for_chip_with_no_env_or_hints():
+    """Chips with empty env_vars and install_hints must not get a detail block."""
+    cfg = ToolConfig(
+        name="MinimalTool",
+        description="A tool with no env vars or hints",
+        chips={
+            "gfx9999": ChipSupport(status="tested", tested_on_rocm="7.0"),
+        },
+    )
+    output = _render_to_str(cfg)
+    assert "gfx9999" in output  # chip still appears in the summary table
+    assert "Environment:" not in output
+    assert "Install hints:" not in output
+
+
+# ---------------------------------------------------------------------------
+# _configs_dir discovery paths
+# ---------------------------------------------------------------------------
+
+
+def test_configs_dir_raises_when_no_configs_anywhere(tmp_path):
+    """FileNotFoundError is raised when neither dev tree nor importlib path works."""
+    import rocmate.configs as cfg_mod
+
+    fake_file = tmp_path / "rocmate" / "configs.py"
+    fake_file.parent.mkdir(parents=True)
+
+    original = cfg_mod.__file__
+    try:
+        cfg_mod.__file__ = str(fake_file)
+        with (
+            patch("rocmate.configs.files", side_effect=ModuleNotFoundError),
+            pytest.raises(FileNotFoundError, match="Could not locate"),
+        ):
+            cfg_mod._configs_dir()
+    finally:
+        cfg_mod.__file__ = original
+
+
+def test_configs_dir_uses_importlib_fallback(tmp_path):
+    """Falls back to importlib.resources when dev tree has no configs/tools directory."""
+    import rocmate.configs as cfg_mod
+
+    fake_installed = tmp_path / "_configs" / "tools"
+    fake_installed.mkdir(parents=True)
+
+    fake_file = tmp_path / "rocmate" / "configs.py"
+    fake_file.parent.mkdir(parents=True)
+
+    mock_traversable = MagicMock()
+    mock_traversable.__str__ = MagicMock(return_value=str(fake_installed))
+    mock_files_obj = MagicMock()
+    mock_files_obj.joinpath.return_value = mock_traversable
+
+    original = cfg_mod.__file__
+    try:
+        cfg_mod.__file__ = str(fake_file)
+        with patch("rocmate.configs.files", return_value=mock_files_obj):
+            result = cfg_mod._configs_dir()
+        assert result == fake_installed
+    finally:
+        cfg_mod.__file__ = original

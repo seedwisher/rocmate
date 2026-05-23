@@ -188,3 +188,22 @@ def test_execute_no_commands_does_not_call_subprocess():
     with patch("rocmate.install.subprocess.run") as mock_run:
         install.execute(plan_no_cmds)
     mock_run.assert_not_called()
+
+
+def test_execute_removes_new_env_var_on_failure():
+    """Env vars that were absent before execute() must be removed on rollback, not set to 'None'."""
+    env_key = "ROCMATE_TEST_ROLLBACK_POP"
+    os.environ.pop(env_key, None)  # guarantee absent before test
+    plan = install.InstallPlan(
+        tool="test",
+        chip="gfx0000",
+        tool_name="TestTool",
+        env_vars={env_key: "sentinel_value"},
+        commands=["pip install something"],
+        hints=[],
+    )
+    with patch("rocmate.install.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1)
+        with pytest.raises(install.InstallError):
+            install.execute(plan)
+    assert env_key not in os.environ
