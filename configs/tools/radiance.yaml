@@ -1,0 +1,36 @@
+name: radiance
+description: >
+  Self-contained C++/HIP LLM inference server with an OpenAI-compatible API and
+  native FP8 kernels (no PyTorch, no AITER dependency). Ships as a Docker image,
+  supports tensor parallelism across multiple AMD GPUs, and serves models in a
+  compact .rad format.
+homepage: https://codeberg.org/StillDeadcode/radiance
+
+chips:
+  gfx1201:
+    status: tested
+    tested_on_rocm: "7.16"
+    notes: >
+      2x Radeon AI PRO R9700 32 GB (gfx1201) + gfx1036 iGPU, Ubuntu 26.04 LTS,
+      kernel 7.0, ROCm 7.16, Docker GPU passthrough via --device=/dev/kfd and
+      --device=/dev/dri. Running daily as a TP=2 inference server for a large MoE
+      model (KV cache in FP8, expert-tiered placement, ~200k context) on both
+      cards. CRITICAL: --security-opt seccomp=unconfined is required — Docker's
+      default seccomp profile blocks a syscall the engine needs for its host-side
+      weight table, and the failure surfaces as a misleading "geometry rejected"
+      kernel error, not a permission error. HSA_OVERRIDE_GFX_VERSION is NOT needed
+      on ROCm 7.x — gfx1201 is a first-class target in rocminfo. P2P between the
+      two GPUs works out of the box (CONFIG_HSA_AMD_P2P is enabled by default in
+      the Ubuntu generic kernel; verify with 'zcat /proc/config.gz' before
+      troubleshooting multi-GPU bandwidth). The AITER gfx1201 gap that silently
+      degrades FP8 to FP32 under SGLang/vLLM does not apply here: radiance has
+      its own native FP8 kernels with no AITER dependency (verified with strings
+      on the binary). The engine republishes :latest very frequently and CLI flags
+      change between majors without back-compat — pin the image digest and re-read
+      docker logs (it self-reports the minimum --gpu-headroom-mib) after every update.
+    env_vars: {}
+    install_hints:
+      - "Docker run (dual GPU TP=2): sudo docker run -d --name radiance --security-opt seccomp=unconfined --device=/dev/kfd --device=/dev/dri --network host --restart unless-stopped -v /path/models:/models stilldeadcode/radiance:latest --model /models/model.rad --served-model-name mymodel --host 0.0.0.0 --port 8000 --tp 2 --max-model-len 32768"
+      - "Verify after start: sudo docker logs radiance (check KV pool, headroom warnings), then curl http://localhost:8000/v1/models and one real /v1/chat/completions request."
+      - "Pin your production image (docker tag sha256:... radiance:pinned) — :latest is republished continuously and flags can break between majors."
+      - "Check for updates via the Docker Hub tags API instead of the Codeberg web UI (which is bot-walled)."
